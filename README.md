@@ -31,7 +31,7 @@ AI Content Filter is a [Millennium](https://steambrew.app) plugin for the Steam 
 - ✅ **Per-game allowlist** — allow the games you are fine with; manage the list in the plugin settings or straight from the game's page.
 - 🔢 **Hidden-games counter** — a small chip shows how many games were filtered on the page, with **Show** to reveal them for a moment.
 - 🌍 **All 30 Steam languages** — detection matches the disclosure heading in every language the store supports, not just English.
-- ⚡ **Light on the network** — only games that scroll into view are checked, results are cached for 7 days (adjustable), and each check stops reading once the disclosure section has passed.
+- ⚡ **Light on the network** — games that scroll into view are checked up to 40 at a time through Steam's store API, and results are cached for 7 days (adjustable).
 - ⌨️ **Keyboard friendly** — the block screen traps focus and **Esc** goes back; blurred games open with **Enter** or **Space**.
 
 ## 📸 Screenshots
@@ -94,7 +94,9 @@ Restart Steam and turn the plugin on in **Millennium → Plugins**.
 <details>
 <summary><b>🔍 Detection</b></summary>
 
-Steam shows the disclosure in the **Content Descriptors** box of a game's store page (`#game_area_content_descriptors`), under a heading such as *AI Generated Content Disclosure*. The plugin reads the headings in that box and matches them against the disclosure title in all 30 store languages. Mature-content headings, which share the same box, are excluded, so a game that only has a mature content notice is not flagged.
+For games in store lists, the plugin asks Steam's store API (`IStoreBrowseService/GetItems`), which returns the developer's AI disclosure as its own field, separate from mature-content notices and the same in every language.
+
+On a game's own page, and for any game the API can't answer, it reads the **Content Descriptors** box of the store page (`#game_area_content_descriptors`). The disclosure heading is matched in all 30 store languages, and mature-content headings in the same box are ignored, so a game that only has a mature content notice is not flagged.
 
 Any disclosure counts, whatever the developer wrote about how AI was used. The block screen and banner quote the developer's text so you can judge for yourself, and the allowlist covers the games you decide to keep.
 
@@ -103,9 +105,9 @@ Any disclosure counts, whatever the developer wrote about how AI was used. The b
 <details>
 <summary><b>⚡ Checks and caching</b></summary>
 
-- Store lists don't say whether a game has a disclosure, so the plugin fetches the game's store page in the background, with your normal store session, the same way your browser would.
-- Only entries within about one screen of the visible area are checked. At most three checks run at a time; if Steam answers *Too Many Requests*, checks pause for 30 seconds.
-- Each check stops reading the page once it reaches the system requirements section, which comes after the content descriptors. That saves roughly 40% of the download.
+- Store lists don't say whether a game has a disclosure, so the plugin looks it up. Only entries within about one screen of the visible area are checked.
+- Games that come into view together are sent to Steam's store API in one request, up to 40 games each. On a test run through 150 newest releases, 91 games were checked with 11 small requests.
+- If the API fails, the plugin reads those games' store pages instead for the next 5 minutes. At most three pages load at a time, each stops reading once it passes the content descriptors, and a *Too Many Requests* answer pauses checks for 30 seconds.
 - Results are stored in the store's local storage for 7 days by default (1–30 in settings). Games that couldn't be checked (region-locked, removed) are retried after 6 hours. **Clear cache** in settings starts over.
 
 </details>
@@ -113,7 +115,7 @@ Any disclosure counts, whatever the developer wrote about how AI was used. The b
 <details>
 <summary><b>🔞 Age-gated games</b></summary>
 
-When a game's page is behind Steam's age check, the plugin asks its Lua backend to fetch the page with the usual age-check cookies attached to that single request. Nothing is changed in your Steam account or browser cookies.
+The store API has no age check, so this only matters for the store-page fallback. When a game's page is behind Steam's age check there, the plugin asks its Lua backend to fetch the page with the usual age-check cookies attached to that single request. Nothing is changed in your Steam account or browser cookies.
 
 </details>
 
@@ -124,7 +126,7 @@ When a game's page is behind Steam's age check, the plugin asks its Lua backend 
 |---|---|---|
 | `webview/` | Steam's store pages | Scans lists, checks games, draws the badges, blur, chip, banner and block screen. |
 | `frontend/` | Steam's main UI | The settings panel under **Millennium → Plugins**. |
-| `backend/` | Millennium's Lua runtime | Stores settings and the allowlist, and fetches age-gated pages. |
+| `backend/` | Millennium's Lua runtime | Stores settings and the allowlist, and fetches age-gated pages for the fallback. |
 
 Settings are saved in Millennium's own config file. The store pages pick up changes every few seconds and whenever the window gets focus.
 
@@ -133,7 +135,7 @@ Settings are saved in Millennium's own config file. The store pages pick up chan
 <details>
 <summary><b>🔒 Privacy</b></summary>
 
-The plugin only talks to `store.steampowered.com`. It has no telemetry, no external servers and no API keys. Everything it learns stays on your PC.
+The plugin only talks to Steam: `store.steampowered.com` and the public store API at `api.steampowered.com` (API requests are sent without your cookies). It has no telemetry, no external servers and no API keys. Everything it learns stays on your PC.
 
 </details>
 

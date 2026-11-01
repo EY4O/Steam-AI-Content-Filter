@@ -1,6 +1,7 @@
 /**
- * Looks up whether an app has an AI disclosure, with a localStorage cache and a
- * small request queue so list pages don't hammer the store.
+ * Looks up whether an app has an AI disclosure, with a localStorage cache. Apps are
+ * looked up in batches through Steam's store API; any it can't answer fall back to a
+ * small queue that reads the app's store page.
  */
 import { headingsFromHtml, isAgeGate, isAiHeading } from './detect';
 
@@ -12,6 +13,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const UNKNOWN_TTL_MS = 6 * 60 * 60 * 1000;
 const CONCURRENCY = 3;
 const RATE_LIMIT_PAUSE_MS = 30_000;
+
+const GET_ITEMS = 'https://api.steampowered.com/IStoreBrowseService/GetItems/v1/';
+const BATCH_SIZE = 40;
+const BATCH_CONCURRENCY = 2;
+// Short wait so apps that scroll into view together share one request.
+const BATCH_GATHER_MS = 50;
+const API_DOWN_PAUSE_MS = 5 * 60 * 1000;
 // The content descriptors sit just above the system requirements; nothing after them matters.
 const END_OF_DESCRIPTORS = /class="game_page_autocollapse sys_req"|id="game_area_sys_req|class="sysreq_contents"/;
 
@@ -120,13 +128,44 @@ async function lookup(appid: number): Promise<Verdict> {
 
 class RateLimited extends Error {}
 
-const waiting: number[] = [];
-const pending = new Map<number, Array<(v: Verdict) => void>>();
-let active = 0;
-let pausedUntil = 0;
-let resumeTimer: number | undefined;
+function storeCountry(): string {
+	try {
+		const config = JSON.parse(document.getElementById('application_config')?.dataset.config ?? '{}');
+		if (typeof config.COUNTRY === 'string' && /^[A-Z]{2}$/.test(config.COUNTRY)) return config.COUNTRY;
+	} catch {
+		// fall through
+	}
+	return 'US';
+}
 
-/** Resolve the verdict for an app, from cache when fresh, otherwise via the queue. */
+/**
+ * Ask the store API about up to BATCH_SIZE apps at once. Its `content_survey_ai_notes`
+ * field holds the developer's AI disclosure and is the same in every language. Apps the
+ * API doesn't return (removed, region-locked, not an app) are left out of the result.
+ */
+async function lookupBatch(appids: number[]): Promise<Map<number, Verdict>> {
+	const input = {
+		ids: appids.map((appid) => ({ appid })),
+		context: { language: 'english', country_code: storeCountry() },
+		data_request: { include_extra_details: true },
+	};
+	const res = await fetch(`${GET_ITEMS}?input_json=${encodeURIComponent(JSON.stringify(input))}`, { credentials: 'omit' });
+	if (!res.ok) throw new Error(`GetItems HTTP ${res.status}`);
+	const items: any[] = (await res.json())?.response?.store_items;
+	if (!Array.isArray(items)) throw new Error('GetItems: no store_items');
+
+	const verdicts = new Map<number, Verdict>();
+	for (const item of items) {
+		if (item?.success !== 1 || item.visible !== true || item.appid !== item.id || !appids.includes(item.appid)) continue;
+		const notes = item.extra_details?.content_survey_ai_notes;
+		verdicts.set(item.appid, typeof notes === 'string' && notes.trim() ? 'ai' : 'clean');
+	}
+	return verdicts;
+}
+
+const pending = new Map<number, Array<(v: Verdict) => void>>();
+
+/** Resolve the verdict for an app, from cache when fresh, otherwise via the queues. */
 export function check(appid: number): Promise<Verdict> {
 	const cached = cachedVerdict(appid);
 	if (cached) return Promise.resolve(cached);
@@ -138,10 +177,64 @@ export function check(appid: number): Promise<Verdict> {
 			return;
 		}
 		pending.set(appid, [resolve]);
-		waiting.push(appid);
-		pump();
+		batchWaiting.push(appid);
+		scheduleBatch();
 	});
 }
+
+// ---- API batches
+
+const batchWaiting: number[] = [];
+let batchActive = 0;
+let batchTimer: number | undefined;
+let apiDownUntil = 0;
+
+function scheduleBatch() {
+	if (batchTimer === undefined) batchTimer = window.setTimeout(pumpBatches, BATCH_GATHER_MS);
+}
+
+function pumpBatches() {
+	batchTimer = undefined;
+	if (Date.now() < apiDownUntil) {
+		// The API is failing; send everything straight to the page queue.
+		waiting.push(...batchWaiting.splice(0));
+		pump();
+		return;
+	}
+	while (batchActive < BATCH_CONCURRENCY && batchWaiting.length) {
+		const appids = batchWaiting.splice(0, BATCH_SIZE);
+		batchActive++;
+		lookupBatch(appids)
+			.catch((err) => {
+				console.warn('[AI Content Filter] store API lookup failed, reading store pages instead:', err);
+				apiDownUntil = Date.now() + API_DOWN_PAUSE_MS;
+				return new Map<number, Verdict>();
+			})
+			.then((verdicts) => {
+				for (const appid of appids) {
+					const verdict = verdicts.get(appid);
+					if (verdict) {
+						rememberVerdict(appid, verdict);
+						settle(appid, verdict);
+					} else {
+						waiting.push(appid);
+					}
+				}
+				pump();
+			})
+			.finally(() => {
+				batchActive--;
+				if (batchWaiting.length) scheduleBatch();
+			});
+	}
+}
+
+// ---- store page fallback
+
+const waiting: number[] = [];
+let active = 0;
+let pausedUntil = 0;
+let resumeTimer: number | undefined;
 
 function pump() {
 	const wait = pausedUntil - Date.now();

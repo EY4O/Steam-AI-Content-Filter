@@ -14,7 +14,7 @@ millennium.toml  Plugin manifest and compiler settings
 | File | Role |
 |---|---|
 | `webview/detect.ts` | Disclosure headings in 30 languages; reads the Content Descriptors box. |
-| `webview/checker.ts` | Background page checks, request queue, rate-limit pause, verdict cache. |
+| `webview/checker.ts` | Batched store-API lookups, store-page fallback queue, rate-limit pause, verdict cache. |
 | `webview/scanner.ts` | Finds game entries in store lists and marks them (hide, blur, badge). |
 | `webview/ui.ts` | Styles, block screen, banners, counter chip. |
 | `webview/preload.ts` | Entry point: loads settings, runs the game page and the scanner, polls for changes. |
@@ -46,7 +46,8 @@ There is no automated test suite yet. Before a release, check by hand in the Ste
 
 | Area | Check |
 |---|---|
-| Search list | AI games are hidden, blurred or badged per the selected mode; the counter matches. |
+| Search list | AI games are hidden, blurred or badged per the selected mode; the counter matches. DevTools shows `GetItems` requests and no `/app/` fetches. |
+| API fallback | With `api.steampowered.com` blocked, games are still checked through their store pages. |
 | Mode switch | Changing the mode in settings updates an open store page within a few seconds. |
 | Game page | The block screen appears; **Esc** goes back; **Show page this time** leaves a banner. |
 | Allowlist | **Always allow this game** persists after a restart; **Remove from allowlist** brings the block screen back. |
