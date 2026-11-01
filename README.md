@@ -8,6 +8,7 @@
 
 <br><br>
 
+<a href="https://github.com/EY4O/Steam-AI-Content-Filter/releases/latest"><img src="https://img.shields.io/github/v/release/EY4O/Steam-AI-Content-Filter" alt="Latest release"></a>
 <a href="LICENSE"><img src="https://img.shields.io/github/license/EY4O/Steam-AI-Content-Filter" alt="License"></a>
 <a href="https://github.com/EY4O/Steam-AI-Content-Filter/commits"><img src="https://img.shields.io/github/last-commit/EY4O/Steam-AI-Content-Filter" alt="Last commit"></a>
 <a href="https://ko-fi.com/looneth"><img src="https://img.shields.io/badge/Ko--fi-Support-FF813F?logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>
@@ -45,7 +46,18 @@ AI Content Filter is a [Millennium](https://steambrew.app) plugin for the Steam 
 
 ## 📦 Installation
 
-### Option 1: **Build and install from source** (Recommended)
+### Option 1: **Download the release** (Recommended)
+
+1. Download `ai-content-filter.star` from the [latest release](https://github.com/EY4O/Steam-AI-Content-Filter/releases/latest). Take the `.star` file, not the source-code ZIP.
+2. Fully exit Steam and copy the file into Millennium's plugins folder:
+
+    | Platform | Plugins folder |
+    |---|---|
+    | Windows | `<Steam folder>\millennium\plugins\` (usually `C:\Program Files (x86)\Steam\millennium\plugins\`) |
+
+3. Start Steam and turn on **AI Content Filter** in **Millennium → Plugins**.
+
+### Option 2: **Build and install from source**
 
 You need [Node.js](https://nodejs.org) 18 or newer and Steam with Millennium installed.
 
@@ -63,7 +75,7 @@ npx starlight pack --release
 
 `auto` writes the plugin straight into Millennium's plugins folder. Restart Steam, then turn the plugin on in **Millennium → Plugins**.
 
-### Option 2: **Manual Installation**
+### Option 3: **Manual Installation**
 
 Build with the default `output_path = "dist"`; the packed plugin is written to a file named `dist` in the project folder.
 
@@ -170,7 +182,7 @@ If AI Content Filter keeps your store feed the way you want it, you can support 
 <details>
 <summary><b>Every version, newest first</b></summary>
 
-Releases are listed on the [GitHub releases page](https://github.com/EY4O/Steam-AI-Content-Filter/releases); 1.0.0 has no release page of its own yet.
+Full notes for each version are on the [GitHub releases page](https://github.com/EY4O/Steam-AI-Content-Filter/releases).
 
 - **1.0.0** — First release: hide, blur or badge AI games across the store, block screen on game pages, per-game allowlist, and a counter for filtered games.
 
