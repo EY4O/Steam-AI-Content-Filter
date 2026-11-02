@@ -10,7 +10,13 @@ M.DEFAULTS = {
     cache_epoch = 0,      -- bumped by "Clear cache"; webkit wipes its cache when it changes
     allowlist = {},       -- array of appids (numbers) the user has explicitly allowed
     allowlist_names = {}, -- appid (string) -> game name, for the settings panel
+    keep_owned = true,    -- badge owned AI games instead of hiding or blurring them
+    keep_wishlisted = true, -- same for wishlisted games
+    show_counter = true,  -- the "N AI games hidden" chip in the bottom-right corner
 }
+
+-- Settings that are simple on/off switches, settable through set_switch().
+M.SWITCHES = { keep_owned = true, keep_wishlisted = true, show_counter = true }
 
 function M.init_defaults()
     for key, value in pairs(M.DEFAULTS) do

@@ -1,4 +1,4 @@
-import { definePlugin, DialogButton, Dropdown, Field, SliderField, usePluginConfig } from 'millennium';
+import { definePlugin, DialogButton, Dropdown, Field, SliderField, ToggleField, usePluginConfig } from 'millennium';
 import { useState } from 'react';
 
 const MODES = [
@@ -27,6 +27,9 @@ const SettingsContent = () => {
 	const [cacheDays] = usePluginConfig<number>('cache_days');
 	const [allowlist] = usePluginConfig<unknown>('allowlist');
 	const [names] = usePluginConfig<Record<string, string>>('allowlist_names');
+	const [keepOwned] = usePluginConfig<boolean>('keep_owned');
+	const [keepWishlisted] = usePluginConfig<boolean>('keep_wishlisted');
+	const [showCounter] = usePluginConfig<boolean>('show_counter');
 	const [cleared, setCleared] = useState(false);
 
 	const ids = toIds(allowlist);
@@ -41,6 +44,28 @@ const SettingsContent = () => {
 			>
 				<Dropdown rgOptions={MODES} selectedOption={mode ?? 'hide'} onChange={(opt) => backend.set_mode(opt.data)} />
 			</Field>
+
+			<ToggleField
+				label="Show games I own"
+				description="Owned AI games get the AI badge instead of being hidden or blurred, and their store pages show a banner instead of the block screen."
+				checked={keepOwned !== false}
+				onChange={(on) => backend.set_switch('keep_owned', on)}
+			/>
+
+			<ToggleField
+				label="Show games on my wishlist"
+				description="The same for wishlisted AI games, including on your Wishlist page."
+				checked={keepWishlisted !== false}
+				onChange={(on) => backend.set_switch('keep_wishlisted', on)}
+			/>
+
+			<ToggleField
+				label="Show the AI games counter"
+				description='The "N AI games hidden" counter in the bottom-right corner of store pages, with its Show button.'
+				checked={showCounter !== false}
+				onChange={(on) => backend.set_switch('show_counter', on)}
+				bottomSeparator="standard"
+			/>
 
 			<SliderField
 				label="Recheck games after"

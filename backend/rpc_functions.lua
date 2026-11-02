@@ -9,7 +9,7 @@ local settings   = require("settings")
 local AGE_GATE_COOKIES = "birthtime=470736001; lastagecheckage=1-January-1985; wants_mature_content=1"
 
 ---@ffi
---- Current settings as a JSON string (mode, cache_days, cache_epoch, allowlist).
+--- Current settings as a JSON string (mode, cache_days, cache_epoch, allowlist, switches).
 ---@return string
 function get_settings()
     return cjson.encode({
@@ -17,7 +17,23 @@ function get_settings()
         cache_days = tonumber(settings.get("cache_days")) or settings.DEFAULTS.cache_days,
         cache_epoch = tonumber(settings.get("cache_epoch")) or 0,
         allowlist = settings.get_allowlist(),
+        keep_owned = settings.get("keep_owned") ~= false,
+        keep_wishlisted = settings.get("keep_wishlisted") ~= false,
+        show_counter = settings.get("show_counter") ~= false,
     })
+end
+
+---@ffi
+--- Turn an on/off setting (keep_owned, keep_wishlisted, show_counter) on or off.
+---@param key string
+---@param on boolean
+---@return boolean
+function set_switch(key, on)
+    if not settings.SWITCHES[key] then
+        return false
+    end
+    millennium.config.set(key, on == true)
+    return true
 end
 
 ---@ffi

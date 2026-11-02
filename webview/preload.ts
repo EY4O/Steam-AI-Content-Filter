@@ -12,9 +12,12 @@ interface Settings {
 	cache_days: number;
 	cache_epoch: number;
 	allowlist: number[] | Record<string, number>;
+	keep_owned: boolean;
+	keep_wishlisted: boolean;
+	show_counter: boolean;
 }
 
-const DEFAULTS: Settings = { mode: 'hide', cache_days: 7, cache_epoch: 0, allowlist: [] };
+const DEFAULTS: Settings = { mode: 'hide', cache_days: 7, cache_epoch: 0, allowlist: [], keep_owned: true, keep_wishlisted: true, show_counter: true };
 // Settings are edited in Steam's Quick Access menu, outside this page; poll while the page is visible.
 const SETTINGS_POLL_MS = 3000;
 
@@ -31,6 +34,31 @@ async function loadSettings(): Promise<Settings> {
 }
 
 const allowlistOf = (s: Settings) => new Set(Object.values(s.allowlist ?? {}).map(Number));
+
+interface UserData {
+	owned: Set<number>;
+	wishlisted: Set<number>;
+}
+
+/** The signed-in user's owned and wishlisted apps, from the same endpoint the store itself uses. */
+async function loadUserData(): Promise<UserData> {
+	try {
+		const res = await fetch('/dynamicstore/userdata/', { credentials: 'include' });
+		const data = res.ok ? await res.json() : {};
+		const ids = (list: unknown) => new Set(Array.isArray(list) ? list.map(Number).filter(Number.isFinite) : []);
+		return { owned: ids(data.rgOwnedApps), wishlisted: ids(data.rgWishlist) };
+	} catch (err) {
+		console.warn('[AI Content Filter] could not load owned and wishlisted games:', err);
+		return { owned: new Set(), wishlisted: new Set() };
+	}
+}
+
+function keptOf(s: Settings, user: UserData): Map<number, string> {
+	const kept = new Map<number, string>();
+	if (s.keep_wishlisted) user.wishlisted.forEach((id) => kept.set(id, 'On your wishlist'));
+	if (s.keep_owned) user.owned.forEach((id) => kept.set(id, 'In your library'));
+	return kept;
+}
 
 function domReady() {
 	return document.readyState === 'loading'
@@ -51,14 +79,14 @@ function createAppPage(appid: number) {
 	if (!isStorePage) return null;
 
 	const { found, text } = disclosureFromDocument(document);
-	rememberVerdict(appid, found ? 'ai' : 'clean');
+	rememberVerdict(appid, found ? 'ai' : 'clean', text);
 	if (!found) return null;
 
 	const name = document.getElementById('appHubAppName')?.textContent?.trim() || 'this game';
 	let removeUi = () => {};
 	let shownOnce = false;
 
-	return function render(mode: Mode, allowlist: Set<number>) {
+	return function render(mode: Mode, allowlist: Set<number>, keptReason?: string) {
 		removeUi();
 		removeUi = () => {};
 
@@ -68,7 +96,7 @@ function createAppPage(appid: number) {
 				'Remove from allowlist',
 				async () => {
 					await backend.disallow_app(appid);
-					render(mode, new Set([...allowlist].filter((id) => id !== appid)));
+					render(mode, new Set([...allowlist].filter((id) => id !== appid)), keptReason);
 				},
 				true,
 			);
@@ -78,12 +106,13 @@ function createAppPage(appid: number) {
 		// Re-render right away instead of waiting for the next settings poll.
 		const allow = async () => {
 			await backend.allow_app(appid, name);
-			render(mode, new Set([...allowlist, appid]));
+			render(mode, new Set([...allowlist, appid]), keptReason);
 		};
 
-		if (mode === 'badge' || shownOnce) {
+		if (mode === 'badge' || shownOnce || keptReason) {
+			const kept = keptReason ? ` <span class="aicf-muted">${escapeHtml(keptReason)}, so it isn’t blocked.</span>` : '';
 			removeUi = showBanner(
-				`This game has an AI Generated Content Disclosure${text ? `: <i>${escapeHtml(text)}</i>` : '.'}`,
+				`This game has an AI Generated Content Disclosure${text ? `: <i>${escapeHtml(text)}</i>` : '.'}${kept}`,
 				'Always allow this game',
 				allow,
 			);
@@ -92,7 +121,7 @@ function createAppPage(appid: number) {
 				onShowOnce: () => {
 					// keep the disclosure visible as a banner once the block screen is dismissed
 					shownOnce = true;
-					queueMicrotask(() => render(mode, allowlist));
+					queueMicrotask(() => render(mode, allowlist, keptReason));
 				},
 				onAllow: allow,
 			});
@@ -103,7 +132,8 @@ function createAppPage(appid: number) {
 export default async function main() {
 	if (location.hostname !== 'store.steampowered.com' || window.top !== window) return;
 
-	let settings = await loadSettings();
+	const [initialSettings, user] = await Promise.all([loadSettings(), loadUserData()]);
+	let settings = initialSettings;
 	initCache(settings.cache_days, settings.cache_epoch);
 
 	await domReady();
@@ -111,9 +141,16 @@ export default async function main() {
 
 	const appid = pageAppId();
 	const renderAppPage = appid !== null ? createAppPage(appid) : null;
-	renderAppPage?.(settings.mode, allowlistOf(settings));
+	let kept = keptOf(settings, user);
+	renderAppPage?.(settings.mode, allowlistOf(settings), kept.get(appid!));
 
-	const scanner = startScanner({ mode: settings.mode, allowlist: allowlistOf(settings), pageAppId: appid });
+	const scanner = startScanner({
+		mode: settings.mode,
+		allowlist: allowlistOf(settings),
+		kept,
+		showCounter: settings.show_counter,
+		pageAppId: appid,
+	});
 
 	let lastJson = JSON.stringify(settings);
 	const refresh = async () => {
@@ -127,13 +164,18 @@ export default async function main() {
 		else setCacheDays(next.cache_days);
 
 		const appearanceChanged =
-			next.mode !== settings.mode || JSON.stringify(next.allowlist) !== JSON.stringify(settings.allowlist);
+			next.mode !== settings.mode ||
+			next.keep_owned !== settings.keep_owned ||
+			next.keep_wishlisted !== settings.keep_wishlisted ||
+			next.show_counter !== settings.show_counter ||
+			JSON.stringify(next.allowlist) !== JSON.stringify(settings.allowlist);
 		settings = next;
 		if (!appearanceChanged) return;
 
 		const allowlist = allowlistOf(next);
-		renderAppPage?.(next.mode, allowlist);
-		scanner.update({ mode: next.mode, allowlist, pageAppId: appid });
+		kept = keptOf(next, user);
+		renderAppPage?.(next.mode, allowlist, kept.get(appid!));
+		scanner.update({ mode: next.mode, allowlist, kept, showCounter: next.show_counter, pageAppId: appid });
 	};
 
 	setInterval(refresh, SETTINGS_POLL_MS);

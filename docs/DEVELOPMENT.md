@@ -51,7 +51,10 @@ There is no automated test suite yet. Before a release, check by hand in the Ste
 | Mode switch | Changing the mode in settings updates an open store page within a few seconds. |
 | Game page | The block screen appears; **Esc** goes back; **Show page this time** leaves a banner. |
 | Allowlist | **Always allow this game** persists after a restart; **Remove from allowlist** brings the block screen back. |
-| Wishlist | AI games' rows are hidden. |
+| Wishlist | With **Show games on my wishlist** off, AI games' rows are hidden; with it on, they get the AI badge. |
+| Owned games | Owned AI games get the AI badge in lists and a banner (no block screen) on their page; the counter doesn't count them. |
+| Tooltips | Hovering a badge or a blurred game shows the developer's disclosure text; it also shows on keyboard focus. |
+| Counter switch | With **Show the AI games counter** off, the bottom-right counter never appears; turning it on shows it within a few seconds. |
 | Clean games | A game with only a mature content notice is not flagged. |
 
 ## Releasing

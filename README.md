@@ -29,8 +29,10 @@ AI Content Filter is a [Millennium](https://steambrew.app) plugin for the Steam 
 - 🙈 **Three ways to filter** — hide AI games completely, blur them behind a click-to-show veil, or just mark them with an **AI** badge.
 - 🛑 **Block screen on game pages** — an AI game's store page opens behind a notice quoting the developer's own disclosure, with **Go back**, **Show page this time** and **Always allow this game**.
 - 🗂️ **Works across the store** — search and browse lists, the front page and carousels, your wishlist and the discovery queue.
+- 💬 **See what the developers wrote** — hover an **AI** badge or a blurred game to read its disclosure without opening the page.
+- 🎮 **Your games stay visible** — games you own or have wishlisted keep the **AI** badge instead of disappearing (each can be switched off).
 - ✅ **Per-game allowlist** — allow the games you are fine with; manage the list in the plugin settings or straight from the game's page.
-- 🔢 **Hidden-games counter** — a small chip shows how many games were filtered on the page, with **Show** to reveal them for a moment.
+- 🔢 **Hidden-games counter** — a small chip shows how many games were filtered on the page, with **Show** to reveal them for a moment. Turn it off in settings if you'd rather not see it.
 - 🌍 **All 30 Steam languages** — detection matches the disclosure heading in every language the store supports, not just English.
 - ⚡ **Light on the network** — games that scroll into view are checked up to 40 at a time through Steam's store API, and results are cached for 7 days (adjustable).
 - ⌨️ **Keyboard friendly** — the block screen traps focus and **Esc** goes back; blurred games open with **Enter** or **Space**.
@@ -54,6 +56,7 @@ AI Content Filter is a [Millennium](https://steambrew.app) plugin for the Steam 
     | Platform | Plugins folder |
     |---|---|
     | Windows | `<Steam folder>\millennium\plugins\` (usually `C:\Program Files (x86)\Steam\millennium\plugins\`) |
+    | Linux | `~/.local/share/millennium/plugins/` (not tested yet) |
 
 3. Start Steam and turn on **AI Content Filter** in **Millennium → Plugins**.
 
@@ -89,7 +92,7 @@ Copy that file into Millennium's plugins folder as `ai-content-filter.star`:
 Copy-Item dist "C:\Program Files (x86)\Steam\millennium\plugins\ai-content-filter.star"
 ```
 
-<sub>Adjust the path if Steam is installed somewhere else.</sub>
+<sub>Adjust the path if Steam is installed somewhere else. On Linux, copy it to `~/.local/share/millennium/plugins/ai-content-filter.star`.</sub>
 
 Restart Steam and turn the plugin on in **Millennium → Plugins**.
 
@@ -98,7 +101,7 @@ Restart Steam and turn the plugin on in **Millennium → Plugins**.
 1. Turn on **AI Content Filter** in **Millennium → Plugins** and restart Steam when asked.
 2. Open the Steam store and browse, for example **New & Noteworthy** or a search sorted by release date. AI games are hidden as they scroll into view.
 3. Open **Millennium → Plugins → AI Content Filter** to pick **Hide**, **Blur** or **Badge only**. The store updates within a few seconds; no restart needed.
-4. Click **Show** on the counter in the bottom-right corner to see what was filtered on the current page.
+4. Hover an **AI** badge or a blurred game to read what the developers disclosed. Click **Show** on the counter in the bottom-right corner to see everything that was filtered on the page.
 5. On a game's page, use **Always allow this game** for games you want to see. Remove them later from the allowlist in the settings, or with **Remove from allowlist** on the game's page.
 
 ## 📖 How It Works
@@ -148,6 +151,8 @@ Settings are saved in Millennium's own config file. The store pages pick up chan
 <summary><b>🔒 Privacy</b></summary>
 
 The plugin only talks to Steam: `store.steampowered.com` and the public store API at `api.steampowered.com` (API requests are sent without your cookies). It has no telemetry, no external servers and no API keys. Everything it learns stays on your PC.
+
+To keep your own games visible, it reads your owned and wishlisted games from the same endpoint the store page itself uses (`/dynamicstore/userdata/`). That list stays in the page and is never saved or sent anywhere.
 
 </details>
 

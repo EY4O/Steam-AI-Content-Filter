@@ -6,7 +6,7 @@
  * their app links and the hidden container is the largest ancestor that still
  * only points at that one app.
  */
-import { cachedVerdict, check } from './checker';
+import { cachedNotes, cachedVerdict, check } from './checker';
 import { createChip, markEntry, Mode, unmarkEntry } from './ui';
 
 const CANDIDATES = 'a[href*="/app/"], [data-ds-appid]';
@@ -34,6 +34,10 @@ const MAX_HIDE_AREA = 0.5;
 export interface ScanOptions {
 	mode: Mode;
 	allowlist: Set<number>;
+	/** Owned or wishlisted apps that are badged instead of hidden or blurred, with the reason shown. */
+	kept: Map<number, string>;
+	/** Whether to show the "N AI games hidden" chip. */
+	showCounter: boolean;
 	/** The app whose store page we're on; its own links are left alone. */
 	pageAppId: number | null;
 }
@@ -87,8 +91,9 @@ export function startScanner(initial: ScanOptions) {
 	const apply = (el: HTMLElement, appid: number) => {
 		if (seen.get(el) !== appid || !el.isConnected || !shouldMark(appid)) return;
 		const container = containerFor(el, appid);
-		const mode = opts.mode === 'hide' && !fitsHide(container) ? 'blur' : opts.mode;
-		markEntry(container, mode);
+		const keptReason = opts.kept.get(appid);
+		const mode = keptReason ? 'badge' : opts.mode === 'hide' && !fitsHide(container) ? 'blur' : opts.mode;
+		markEntry(container, mode, { notes: cachedNotes(appid), keptReason });
 		marked.set(el, container);
 	};
 
@@ -128,7 +133,7 @@ export function startScanner(initial: ScanOptions) {
 			if (appid === null || appid === opts.pageAppId || opts.allowlist.has(appid)) continue;
 
 			const cached = cachedVerdict(appid);
-			if (cached === 'ai') aiApps.add(appid);
+			if (cached === 'ai' && !opts.kept.has(appid)) aiApps.add(appid);
 			if (seen.get(el) === appid) continue;
 
 			const previous = marked.get(el);
@@ -141,7 +146,7 @@ export function startScanner(initial: ScanOptions) {
 			if (cached === 'ai') apply(el, appid);
 			else if (cached === undefined) visibility.observe(el);
 		}
-		chip.update(aiApps.size, opts.mode);
+		chip.update(opts.showCounter ? aiApps.size : 0, opts.mode);
 	};
 
 	/** Forget every decision and re-run with the current options (settings changed or chip toggled). */

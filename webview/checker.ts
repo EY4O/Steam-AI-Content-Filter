@@ -3,11 +3,19 @@
  * looked up in batches through Steam's store API; any it can't answer fall back to a
  * small queue that reads the app's store page.
  */
-import { headingsFromHtml, isAgeGate, isAiHeading } from './detect';
+import { disclosureFromDocument, headingsFromHtml, isAgeGate, isAiHeading } from './detect';
 
 export type Verdict = 'ai' | 'clean' | 'unknown';
 
-const CACHE_KEY = 'aicf:verdicts:v1';
+/** A lookup result; `notes` is the developer's disclosure text, when there is one. */
+interface Found {
+	verdict: Verdict;
+	notes?: string;
+}
+
+// v2 entries carry the disclosure text; v1 had verdicts only.
+const CACHE_KEY = 'aicf:verdicts:v2';
+const OLD_CACHE_KEYS = ['aicf:verdicts:v1'];
 const EPOCH_KEY = 'aicf:epoch';
 const DAY_MS = 24 * 60 * 60 * 1000;
 const UNKNOWN_TTL_MS = 6 * 60 * 60 * 1000;
@@ -20,10 +28,12 @@ const BATCH_CONCURRENCY = 2;
 // Short wait so apps that scroll into view together share one request.
 const BATCH_GATHER_MS = 50;
 const API_DOWN_PAUSE_MS = 5 * 60 * 1000;
+// Enough for the tooltip; keeps the localStorage cache small.
+const NOTES_MAX = 600;
 // The content descriptors sit just above the system requirements; nothing after them matters.
 const END_OF_DESCRIPTORS = /class="game_page_autocollapse sys_req"|id="game_area_sys_req|class="sysreq_contents"/;
 
-type Entry = [verdict: Verdict, checkedAt: number];
+type Entry = [verdict: Verdict, checkedAt: number, notes?: string];
 
 let cache: Record<string, Entry> = {};
 let ttlMs = 7 * DAY_MS;
@@ -36,6 +46,7 @@ function isFresh(entry: Entry, now = Date.now()) {
 export function initCache(cacheDays: number, epoch: number) {
 	setCacheDays(cacheDays);
 	try {
+		OLD_CACHE_KEYS.forEach((key) => localStorage.removeItem(key));
 		if (localStorage.getItem(EPOCH_KEY) !== String(epoch)) {
 			localStorage.removeItem(CACHE_KEY);
 			localStorage.setItem(EPOCH_KEY, String(epoch));
@@ -77,8 +88,13 @@ export function cachedVerdict(appid: number): Verdict | undefined {
 	return entry && isFresh(entry) ? entry[0] : undefined;
 }
 
-export function rememberVerdict(appid: number, verdict: Verdict) {
-	cache[appid] = [verdict, Date.now()];
+export function cachedNotes(appid: number): string | undefined {
+	return cache[appid]?.[2];
+}
+
+export function rememberVerdict(appid: number, verdict: Verdict, notes?: string) {
+	const text = verdict === 'ai' ? notes?.replace(/\s+/g, ' ').trim().slice(0, NOTES_MAX) : undefined;
+	cache[appid] = text ? [verdict, Date.now(), text] : [verdict, Date.now()];
 	persist();
 }
 
@@ -109,21 +125,23 @@ async function readUntilDescriptors(res: Response): Promise<string> {
 	return html;
 }
 
-async function lookup(appid: number): Promise<Verdict> {
+async function lookup(appid: number): Promise<Found> {
 	const res = await fetch(`/app/${appid}/`, { credentials: 'include' });
 	if (res.status === 429) throw new RateLimited();
-	if (!res.ok) return 'unknown';
+	if (!res.ok) return { verdict: 'unknown' };
 	const html = await readUntilDescriptors(res);
 
 	if (isAgeGate(res.url, html)) {
 		// The user's account hasn't passed this age gate; ask the backend to fetch it instead.
 		const headings = fromBackend<string[] | Record<string, string> | null>(await backend.fetch_descriptor_headings(appid));
-		return headings ? verdictFromHeadings(Object.values(headings)) : 'unknown';
+		return { verdict: headings ? verdictFromHeadings(Object.values(headings)) : 'unknown' };
 	}
 	// Removed or region-locked apps redirect away from their page.
-	if (!new RegExp(`/app/${appid}(/|$|\\?)`).test(res.url)) return 'unknown';
+	if (!new RegExp(`/app/${appid}(/|$|\\?)`).test(res.url)) return { verdict: 'unknown' };
 
-	return verdictFromHeadings(headingsFromHtml(html));
+	const verdict = verdictFromHeadings(headingsFromHtml(html));
+	if (verdict !== 'ai') return { verdict };
+	return { verdict, notes: disclosureFromDocument(new DOMParser().parseFromString(html, 'text/html')).text };
 }
 
 class RateLimited extends Error {}
@@ -143,7 +161,7 @@ function storeCountry(): string {
  * field holds the developer's AI disclosure and is the same in every language. Apps the
  * API doesn't return (removed, region-locked, not an app) are left out of the result.
  */
-async function lookupBatch(appids: number[]): Promise<Map<number, Verdict>> {
+async function lookupBatch(appids: number[]): Promise<Map<number, Found>> {
 	const input = {
 		ids: appids.map((appid) => ({ appid })),
 		context: { language: 'english', country_code: storeCountry() },
@@ -154,13 +172,13 @@ async function lookupBatch(appids: number[]): Promise<Map<number, Verdict>> {
 	const items: any[] = (await res.json())?.response?.store_items;
 	if (!Array.isArray(items)) throw new Error('GetItems: no store_items');
 
-	const verdicts = new Map<number, Verdict>();
+	const results = new Map<number, Found>();
 	for (const item of items) {
 		if (item?.success !== 1 || item.visible !== true || item.appid !== item.id || !appids.includes(item.appid)) continue;
 		const notes = item.extra_details?.content_survey_ai_notes;
-		verdicts.set(item.appid, typeof notes === 'string' && notes.trim() ? 'ai' : 'clean');
+		results.set(item.appid, typeof notes === 'string' && notes.trim() ? { verdict: 'ai', notes } : { verdict: 'clean' });
 	}
-	return verdicts;
+	return results;
 }
 
 const pending = new Map<number, Array<(v: Verdict) => void>>();
@@ -208,14 +226,14 @@ function pumpBatches() {
 			.catch((err) => {
 				console.warn('[AI Content Filter] store API lookup failed, reading store pages instead:', err);
 				apiDownUntil = Date.now() + API_DOWN_PAUSE_MS;
-				return new Map<number, Verdict>();
+				return new Map<number, Found>();
 			})
-			.then((verdicts) => {
+			.then((results) => {
 				for (const appid of appids) {
-					const verdict = verdicts.get(appid);
-					if (verdict) {
-						rememberVerdict(appid, verdict);
-						settle(appid, verdict);
+					const found = results.get(appid);
+					if (found) {
+						rememberVerdict(appid, found.verdict, found.notes);
+						settle(appid, found.verdict);
 					} else {
 						waiting.push(appid);
 					}
@@ -251,9 +269,9 @@ function pump() {
 		const appid = waiting.shift()!;
 		active++;
 		lookup(appid)
-			.then((verdict) => {
-				rememberVerdict(appid, verdict);
-				settle(appid, verdict);
+			.then((found) => {
+				rememberVerdict(appid, found.verdict, found.notes);
+				settle(appid, found.verdict);
 			})
 			.catch((err) => {
 				if (err instanceof RateLimited) {

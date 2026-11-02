@@ -21,6 +21,17 @@ const STYLE = `
 	letter-spacing: .04em; text-shadow: none;
 }
 .aicf-badge { position: absolute; top: 4px; left: 4px; z-index: 20; pointer-events: none; }
+.aicf-badge .aicf-pill { pointer-events: auto; cursor: help; }
+.aicf-tip {
+	position: fixed; z-index: 100000; max-width: 340px; padding: 10px 12px; border-radius: 4px;
+	background: #171d25; border: 1px solid rgba(194, 65, 12, .6); box-shadow: 0 8px 28px rgba(0,0,0,.6);
+	color: #c7d5e0; font: 12px/1.45 "Motiva Sans", Arial, sans-serif; text-align: left; text-shadow: none;
+	pointer-events: none;
+}
+.aicf-tip[hidden] { display: none; }
+.aicf-tip b { display: block; margin-bottom: 4px; color: #fff; font-size: 12px; }
+.aicf-tip i { display: block; }
+.aicf-tip small { display: block; margin-top: 6px; color: #8f98a0; }
 .aicf-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .aicf-gate {
@@ -57,6 +68,7 @@ const STYLE = `
 }
 .aicf-banner.muted { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.12); color: #8f98a0; }
 .aicf-banner span.grow { flex: 1; min-width: 200px; }
+.aicf-banner .aicf-muted { color: #8f98a0; }
 .aicf-banner .aicf-btn { padding: 4px 10px; font-size: 12px; }
 
 .aicf-chip {
@@ -84,8 +96,53 @@ function ensurePositioned(el: HTMLElement) {
 
 const pill = () => '<span class="aicf-pill" aria-hidden="true">AI</span>';
 
+export interface EntryInfo {
+	/** The developer's disclosure text, if known. */
+	notes?: string;
+	/** Why a game is shown despite its disclosure, e.g. "In your library". */
+	keptReason?: string;
+}
+
+let tip: HTMLDivElement | undefined;
+
+function tipHtml({ notes, keptReason }: EntryInfo) {
+	const body = notes
+		? `<i>“${escapeHtml(notes)}”</i>`
+		: '<i>Open the game’s store page to read what the developers wrote.</i>';
+	const foot = keptReason ? `<small>${escapeHtml(keptReason)}, so it isn’t filtered.</small>` : '';
+	return `<b>AI Generated Content Disclosure</b>${body}${foot}`;
+}
+
+/** Show the disclosure in a tooltip while `trigger` is hovered or focused, placed next to `anchor`. */
+function attachTip(trigger: HTMLElement, anchor: HTMLElement, info: EntryInfo) {
+	const show = () => {
+		if (!tip) {
+			tip = document.createElement('div');
+			tip.className = 'aicf-tip';
+			tip.setAttribute('role', 'tooltip');
+			document.body.appendChild(tip);
+		}
+		tip.innerHTML = tipHtml(info);
+		tip.hidden = false;
+		const a = anchor.getBoundingClientRect();
+		const t = tip.getBoundingClientRect();
+		const below = a.bottom + 6 + t.height <= innerHeight;
+		tip.style.top = `${below ? a.bottom + 6 : Math.max(6, a.top - 6 - t.height)}px`;
+		tip.style.left = `${Math.min(Math.max(6, a.left), innerWidth - t.width - 6)}px`;
+	};
+	const hide = () => {
+		if (tip) tip.hidden = true;
+	};
+	trigger.addEventListener('mouseenter', show);
+	trigger.addEventListener('focus', show);
+	trigger.addEventListener('mouseleave', hide);
+	trigger.addEventListener('blur', hide);
+	// The card may be hidden or removed while the tooltip is up.
+	trigger.addEventListener('click', hide);
+}
+
 /** Mark a list entry (capsule, search row, wishlist row…) as an AI game. */
-export function markEntry(container: HTMLElement, mode: Mode) {
+export function markEntry(container: HTMLElement, mode: Mode, info: EntryInfo = {}) {
 	if (container.dataset.aicf) return;
 	container.dataset.aicf = mode;
 
@@ -95,11 +152,14 @@ export function markEntry(container: HTMLElement, mode: Mode) {
 	}
 
 	ensurePositioned(container);
+	const said = info.notes ? ` The developers say: ${info.notes}` : '';
 	if (mode === 'badge') {
 		const badge = document.createElement('span');
 		badge.className = 'aicf-badge';
-		badge.innerHTML = `${pill()}<span class="aicf-sr">Has AI-generated content.</span>`;
-		badge.title = 'This game has an AI Generated Content Disclosure';
+		badge.innerHTML = `${pill()}<span class="aicf-sr"></span>`;
+		badge.querySelector('.aicf-sr')!.textContent = `Has AI-generated content.${said}`;
+		const pillEl = badge.querySelector<HTMLElement>('.aicf-pill')!;
+		attachTip(pillEl, pillEl, info);
 		container.appendChild(badge);
 		return;
 	}
@@ -109,11 +169,13 @@ export function markEntry(container: HTMLElement, mode: Mode) {
 	veil.className = 'aicf-veil';
 	veil.tabIndex = 0;
 	veil.setAttribute('role', 'button');
-	veil.setAttribute('aria-label', 'Hidden: this game has AI-generated content. Activate to show it.');
+	veil.setAttribute('aria-label', `Hidden: this game has AI-generated content.${said} Activate to show it.`);
 	veil.innerHTML = `${pill()}<small aria-hidden="true">AI-generated content · click to show</small>`;
+	attachTip(veil, veil.querySelector('small')!, info);
 	const reveal = (e: Event) => {
 		e.preventDefault();
 		e.stopPropagation();
+		tip?.setAttribute('hidden', '');
 		container.classList.remove('aicf-blur');
 		veil.remove();
 	};
