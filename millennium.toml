@@ -1,7 +1,7 @@
 [plugin]
 id = "ai-content-filter"
 name = "AI Content Filter"
-version = "1.0.0"
+version = "1.1.0"
 author = "sanscura"
 description = "Hide, blur or flag Steam store games that carry an AI Generated Content Disclosure."
 

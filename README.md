@@ -189,6 +189,7 @@ If AI Content Filter keeps your store feed the way you want it, you can support 
 
 Full notes for each version are on the [GitHub releases page](https://github.com/EY4O/Steam-AI-Content-Filter/releases).
 
+- **1.1.0** — Hover an AI badge or blurred game to read the developer's disclosure; games you own or have wishlisted stay visible with the AI badge; the counter can be turned off in settings.
 - **1.0.0** — First release: hide, blur or badge AI games across the store, block screen on game pages, per-game allowlist, and a counter for filtered games.
 
 </details>
