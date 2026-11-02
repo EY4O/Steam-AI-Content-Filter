@@ -1,0 +1,60 @@
+name: Bug report
+description: A game was filtered wrongly, slipped through, or something on the store broke.
+labels: [bug]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong?
+      options:
+        - A game with an AI disclosure was not filtered
+        - A game without an AI disclosure was filtered
+        - Something on a store page looks broken
+        - Settings don't save or don't apply
+        - Something else
+    validations:
+      required: true
+  - type: input
+    id: link
+    attributes:
+      label: Store link
+      description: The game's store page, or the store page where it happened.
+      placeholder: https://store.steampowered.com/app/...
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Filter mode
+      options:
+        - Hide
+        - Blur
+        - Badge only
+    validations:
+      required: true
+  - type: input
+    id: language
+    attributes:
+      label: Steam language
+      placeholder: English
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+      description: Steps to reproduce help a lot.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Screenshot or log
+      description: >-
+        A screenshot of the page, and anything from Steam → Millennium → Logs → AI Content Filter.
+  - type: input
+    id: versions
+    attributes:
+      label: Plugin and Millennium version
+      description: Millennium's version is at the bottom of Steam → Millennium → General.
+      placeholder: AI Content Filter 1.0.0, Millennium 3.6.2, Windows 11
