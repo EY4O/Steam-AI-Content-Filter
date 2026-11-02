@@ -20,7 +20,7 @@ const STYLE = `
 	background: #c2410c; color: #fff; font: 700 11px/1.2 "Motiva Sans", Arial, sans-serif;
 	letter-spacing: .04em; text-shadow: none;
 }
-.aicf-badge { position: absolute; top: 4px; left: 4px; z-index: 20; pointer-events: none; }
+.aicf-badge { position: absolute; right: 4px; bottom: 4px; z-index: 20; pointer-events: none; }
 .aicf-badge .aicf-pill { pointer-events: auto; cursor: help; }
 .aicf-tip {
 	position: fixed; z-index: 100000; max-width: 340px; padding: 10px 12px; border-radius: 4px;
@@ -96,6 +96,29 @@ function ensurePositioned(el: HTMLElement) {
 
 const pill = () => '<span class="aicf-pill" aria-hidden="true">AI</span>';
 
+// Legacy store wrappers around a card's capsule art (some draw it as a background image).
+const CAPSULE_BOXES = '.capsule_image_ctn, .search_capsule, .tab_item_cap';
+// Smaller images are icons (platforms, review scores), not the game's capsule.
+const MIN_CAPSULE_WIDTH = 60;
+
+/** The box around the entry's capsule image, so the badge sits on the art instead of the price or text. */
+function badgeHost(container: HTMLElement): HTMLElement {
+	const known = container.querySelector<HTMLElement>(CAPSULE_BOXES);
+	if (known) return known;
+	let best: HTMLImageElement | null = null;
+	let bestArea = 0;
+	for (const img of container.querySelectorAll('img')) {
+		const { width, height } = img.getBoundingClientRect();
+		if (width >= MIN_CAPSULE_WIDTH && width * height > bestArea) {
+			best = img;
+			bestArea = width * height;
+		}
+	}
+	let host = best?.parentElement;
+	if (host?.tagName === 'PICTURE') host = host.parentElement;
+	return host && container.contains(host) ? host : container;
+}
+
 export interface EntryInfo {
 	/** The developer's disclosure text, if known. */
 	notes?: string;
@@ -151,19 +174,21 @@ export function markEntry(container: HTMLElement, mode: Mode, info: EntryInfo = 
 		return;
 	}
 
-	ensurePositioned(container);
 	const said = info.notes ? ` The developers say: ${info.notes}` : '';
 	if (mode === 'badge') {
+		const host = badgeHost(container);
+		ensurePositioned(host);
 		const badge = document.createElement('span');
 		badge.className = 'aicf-badge';
 		badge.innerHTML = `${pill()}<span class="aicf-sr"></span>`;
 		badge.querySelector('.aicf-sr')!.textContent = `Has AI-generated content.${said}`;
 		const pillEl = badge.querySelector<HTMLElement>('.aicf-pill')!;
 		attachTip(pillEl, pillEl, info);
-		container.appendChild(badge);
+		host.appendChild(badge);
 		return;
 	}
 
+	ensurePositioned(container);
 	container.classList.add('aicf-blur');
 	const veil = document.createElement('div');
 	veil.className = 'aicf-veil';
@@ -190,7 +215,8 @@ export function markEntry(container: HTMLElement, mode: Mode, info: EntryInfo = 
 export function unmarkEntry(container: HTMLElement) {
 	delete container.dataset.aicf;
 	container.classList.remove('aicf-hidden', 'aicf-blur', 'aicf-rel');
-	container.querySelectorAll(':scope > .aicf-veil, :scope > .aicf-badge').forEach((n) => n.remove());
+	container.querySelectorAll('.aicf-rel').forEach((n) => n.classList.remove('aicf-rel'));
+	container.querySelectorAll(':scope > .aicf-veil, .aicf-badge').forEach((n) => n.remove());
 }
 
 export function escapeHtml(text: string) {
